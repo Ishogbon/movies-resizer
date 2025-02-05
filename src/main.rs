@@ -11,7 +11,7 @@ struct Args {
     destination: String,
 }
 
-fn get_video_dimensions(file_path: &str) -> (u32, u32) {
+fn get_video_dimensions(file_path: &str) -> (u16, u16) {
     let output = Command::new("ffprobe")
         .arg("-v")
         .arg("error")
@@ -34,8 +34,8 @@ fn get_video_dimensions(file_path: &str) -> (u32, u32) {
     let results: Vec<&str> = output_str.split_whitespace().collect();
 
     if results.len() == 2 {
-        let width = results[0].parse::<u32>().unwrap();
-        let height = results[1].parse::<u32>().unwrap();
+        let width = results[0].parse::<u16>().unwrap();
+        let height = results[1].parse::<u16>().unwrap();
         return (width, height);
     }
     panic!("Something went wrong parsing dimensions");
@@ -98,6 +98,7 @@ fn main() {
         destination.push('/');
         destination.push_str(file.file_name().to_str().unwrap());
         process_video(file.path().to_str().unwrap(), destination.as_str());
-        read_buffer(&destination);
+        let (video_width, video_height) = get_video_dimensions(&destination);
+        read_buffer(&destination, video_width, video_height);
     });
 }

@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::{
+    collections::HashMap,
     fs::{self, File},
     io::{BufReader, Read},
     process::Command,
@@ -42,6 +43,7 @@ fn get_video_dimensions(file_path: &str) -> (u16, u16) {
 }
 
 fn read_buffer(file_path: &str, width: u16, height: u16) {
+    println!("{}, {}, {}", file_path, width, height);
     let scale: usize = width as usize * height as usize * 3;
 
     let file = File::open(file_path).expect("Unable to read file");
@@ -49,26 +51,36 @@ fn read_buffer(file_path: &str, width: u16, height: u16) {
 
     let mut buffer = vec![0u8; scale];
 
-    let mut frame_number = 0;
+    let mut frame_number = 1;
 
+    let mut frames: HashMap<String, Vec<(u8, u8, u8)>> = HashMap::new();
     while reader.read_exact(&mut buffer).is_ok() {
+        let frame_entry = frames
+            .entry(format!("frame_{}", frame_number))
+            .or_insert_with(Vec::new);
+
+        for pix_position_offset in (0..buffer.len()).step_by(3) {
+            if pix_position_offset + 2 < buffer.len() {
+                let r = buffer[pix_position_offset];
+                let g = buffer[pix_position_offset + 1];
+                let b = buffer[pix_position_offset + 2];
+
+                frame_entry.push((r, g, b));
+
+                println!(
+                    "Frame {} - Pixel R: {}, G: {}, B: {}",
+                    frame_number, r, g, b
+                );
+            }
+        }
         frame_number += 1;
 
-        // Example: Get the top-left pixel of the frame
-        let r = buffer[0];
-        let g = buffer[1];
-        let b = buffer[2];
-
-        println!(
-            "Frame {} - First pixel R: {}, G: {}, B: {}",
-            frame_number, r, g, b
-        );
+        println!("Finished reading {} frames", frame_number);
     }
-
-    println!("Finished reading {} frames", frame_number);
 }
 
-fn process_video(input: &str, output: &str) {
+fn process_video(input: &str, output: &str) -> (u16, u16) {
+    let (movie_width, movie_height) = get_video_dimensions(input);
     let status = Command::new("ffmpeg")
         .args(["-i", input])
         .args(["-vf", "scale=540:-1,fps=1"])
@@ -79,11 +91,15 @@ fn process_video(input: &str, output: &str) {
         .status()
         .expect("Failed to execute ffmpeg");
 
+    let movie_height = (movie_height as f64 * 540 as f64 / movie_width as f64).round() as u16;
+    let movie_width: u16 = 540;
+
     if status.success() {
         println!("Processed: {} -> {}", input, output);
     } else {
         eprintln!("Failed to process: {}", input);
     }
+    return (movie_width, movie_height);
 }
 
 fn main() {
@@ -97,8 +113,8 @@ fn main() {
         let mut destination = args.destination.clone();
         destination.push('/');
         destination.push_str(file.file_name().to_str().unwrap());
-        process_video(file.path().to_str().unwrap(), destination.as_str());
-        let (video_width, video_height) = get_video_dimensions(&destination);
+        let (video_width, video_height) =
+            process_video(file.path().to_str().unwrap(), destination.as_str());
         read_buffer(&destination, video_width, video_height);
     });
 }

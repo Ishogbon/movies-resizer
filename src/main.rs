@@ -2,7 +2,7 @@ use clap::Parser;
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{BufReader, Read},
+    io::{BufReader, Read, Write},
     process::Command,
 };
 
@@ -67,16 +67,21 @@ fn read_buffer(file_path: &str, width: u16, height: u16) {
 
                 frame_entry.push((r, g, b));
 
-                println!(
-                    "Frame {} - Pixel R: {}, G: {}, B: {}",
-                    frame_number, r, g, b
-                );
+                // println!(
+                //     "Frame {} - Pixel R: {}, G: {}, B: {}",
+                //     frame_number, r, g, b
+                // );
             }
         }
         frame_number += 1;
-
         println!("Finished reading {} frames", frame_number);
     }
+    let frames_json = serde_json::to_string(&frames).expect("Failed to serialize");
+    let mut file = File::create(format!("{}{}", file_path, ".json"))
+        .expect("Failed to create json file to store frames");
+    file.write_all(frames_json.as_bytes())
+        .expect("Faile to write frames_json into file");
+    println!("Finished writing to {}", file_path);
 }
 
 fn process_video(input: &str, output: &str) -> (u16, u16) {
@@ -107,6 +112,14 @@ fn main() {
     let files: Vec<_> = fs::read_dir(args.source)
         .unwrap()
         .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("mp4"))
+                .unwrap_or(false)
+        })
         .collect();
 
     files.iter().for_each(|file| {

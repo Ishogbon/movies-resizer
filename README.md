@@ -96,7 +96,7 @@ Contributions are welcome! If you have suggestions, bug fixes, or new features, 
 
 ## Contact
 
-For any questions or issues, please contact [your email] or visit [your GitHub profile](https://github.com/yourusername).
+For any questions or issues, please contact [ishogbon@gmail.com] or visit [your GitHub profile](https://github.com/Ishogbon).
 
 ---
 

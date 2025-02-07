@@ -10,6 +10,8 @@ use std::{
 struct Args {
     source: String,
     destination: String,
+    #[arg(short, long, action = clap::ArgAction::SetTrue)]
+    json: bool,
 }
 
 fn get_video_dimensions(file_path: &str) -> (u16, u16) {
@@ -42,45 +44,56 @@ fn get_video_dimensions(file_path: &str) -> (u16, u16) {
     panic!("Something went wrong parsing dimensions");
 }
 
-fn read_buffer(file_path: &str, width: u16, height: u16) {
-    println!("{}, {}, {}", file_path, width, height);
+fn read_buffer(file_path: &str, width: u16, height: u16, json: bool) {
     let scale: usize = width as usize * height as usize * 3;
 
-    let file = File::open(file_path).expect("Unable to read file");
-    let mut reader = BufReader::new(file);
+    if json {
+        let file = File::open(file_path).expect("Unable to read file");
+        let mut reader = BufReader::new(file);
 
-    let mut buffer = vec![0u8; scale];
+        let mut buffer = vec![0u8; scale];
 
-    let mut frame_number = 1;
+        let mut frame_number = 1;
 
-    let mut frames: HashMap<String, Vec<(u8, u8, u8)>> = HashMap::new();
-    while reader.read_exact(&mut buffer).is_ok() {
-        let frame_entry = frames
-            .entry(format!("frame_{}", frame_number))
-            .or_insert_with(Vec::new);
+        let mut frames: HashMap<String, Vec<(u8, u8, u8)>> = HashMap::new();
+        while reader.read_exact(&mut buffer).is_ok() {
+            let frame_entry = frames
+                .entry(format!("frame_{}", frame_number))
+                .or_insert_with(Vec::new);
 
-        for pix_position_offset in (0..buffer.len()).step_by(3) {
-            if pix_position_offset + 2 < buffer.len() {
-                let r = buffer[pix_position_offset];
-                let g = buffer[pix_position_offset + 1];
-                let b = buffer[pix_position_offset + 2];
+            for pix_position_offset in (0..buffer.len()).step_by(3) {
+                if pix_position_offset + 2 < buffer.len() {
+                    let r = buffer[pix_position_offset];
+                    let g = buffer[pix_position_offset + 1];
+                    let b = buffer[pix_position_offset + 2];
 
-                frame_entry.push((r, g, b));
+                    frame_entry.push((r, g, b));
 
-                // println!(
-                //     "Frame {} - Pixel R: {}, G: {}, B: {}",
-                //     frame_number, r, g, b
-                // );
+                    // println!(
+                    //     "Frame {} - Pixel R: {}, G: {}, B: {}",
+                    //     frame_number, r, g, b
+                    // );
+                }
             }
+            frame_number += 1;
+            println!("Finished reading {} frames", frame_number);
         }
-        frame_number += 1;
-        println!("Finished reading {} frames", frame_number);
+        let frames_json = serde_json::to_string(&frames).expect("Failed to serialize");
+        let mut file = File::create(format!("{}{}", file_path, ".json"))
+            .expect("Failed to create json file to store frames");
+        file.write_all(frames_json.as_bytes())
+            .expect("Faile to write frames_json into file");
     }
-    let frames_json = serde_json::to_string(&frames).expect("Failed to serialize");
-    let mut file = File::create(format!("{}{}", file_path, ".json"))
-        .expect("Failed to create json file to store frames");
-    file.write_all(frames_json.as_bytes())
-        .expect("Faile to write frames_json into file");
+    let mut dimensions: HashMap<&str, u32> = HashMap::new();
+    dimensions.insert("width", width as u32);
+    dimensions.insert("height", height as u32);
+    dimensions.insert("scale", scale.try_into().unwrap());
+    let dimensions_json =
+        serde_json::to_string(&dimensions).expect("Unable to parse dimensions to json");
+    let mut file = File::create(format!("{}{}", file_path, ".meta.json"))
+        .expect("Unable to create meta file for video dimensions");
+    file.write_all(dimensions_json.as_bytes())
+        .expect("Something went wrong writing video dimensions");
     println!("Finished writing to {}", file_path);
 }
 
@@ -128,6 +141,6 @@ fn main() {
         destination.push_str(file.file_name().to_str().unwrap());
         let (video_width, video_height) =
             process_video(file.path().to_str().unwrap(), destination.as_str());
-        read_buffer(&destination, video_width, video_height);
+        read_buffer(&destination, video_width, video_height, args.json);
     });
 }
